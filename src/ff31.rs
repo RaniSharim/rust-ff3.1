@@ -2,7 +2,7 @@ use aes::cipher::{generic_array::GenericArray, BlockEncrypt, KeyInit};
 use aes::Aes128;
 
 use num_bigint::{BigUint, ToBigUint};
-use std::ops::Add;
+use std::ops::{Add, Sub};
 pub struct FF31<'a> {
     key: &'a [u8],
     radix: u32,
@@ -20,14 +20,30 @@ impl<'a> FF31<'a> {
         }
     }
 
-    pub fn encrypt(self, plain_text: &[u32], tweak: &[u8; 7]) -> Vec<u32> {
+    pub fn encrypt(&self, plain_text: &[u32], tweak: &[u8; 7]) -> Vec<u32> {
+        self.cipher(plain_text, tweak, true)
+    }
+
+    pub fn decrypt(&self, plain_text: &[u32], tweak: &[u8; 7]) -> Vec<u32> {
+        self.cipher(plain_text, tweak, false)
+    }
+
+    pub fn cipher(&self, plain_text: &[u32], tweak: &[u8; 7], is_enc: bool) -> Vec<u32> {
         // step 1
         let u = plain_text.len() / 2;
         let v = plain_text.len() - u;
 
         // step 2
-        let mut a = Vec::from(&plain_text[..u]);
-        let mut b = Vec::from(&plain_text[u..]);
+        let mut a: Vec<u32>;
+        let mut b: Vec<u32>;
+
+        if is_enc {
+            a = Vec::from(&plain_text[..u]);
+            b = Vec::from(&plain_text[u..]);
+        } else {
+            b = Vec::from(&plain_text[..u]);
+            a = Vec::from(&plain_text[u..]);
+        }
 
         // step 3
         let t_l = [tweak[0], tweak[1], tweak[2], tweak[3] & 0xf0];
@@ -39,13 +55,18 @@ impl<'a> FF31<'a> {
             let mut m = u as u32;
             let mut w = t_r;
 
-            if i % 2 == 0 {
+            if (is_enc && i % 2 == 0) || (!is_enc && i % 2 == 1) {
                 m = v as u32;
                 w = t_l;
             }
 
-            p.copy_from_slice(&w[..3]);
-            p[3] ^= i as u8;
+            p[..3].copy_from_slice(&w[..3]);
+
+            if is_enc {
+                p[3] ^= i as u8;
+            } else {
+                p[3] ^= (7 - i) as u8;
+            }
 
             let nb = to_bytes(revs(&b));
 
@@ -61,7 +82,12 @@ impl<'a> FF31<'a> {
 
             let y = BigUint::from_bytes_be(&p);
             let mut c = BigUint::from_bytes_be(&to_bytes(revs(&a)));
-            c = c.add(y);
+
+            if is_enc {
+                c = c.add(y);
+            } else {
+                c = c.sub(y);
+            }
 
             let r = self.radix.to_biguint().unwrap();
             r.pow(m);
@@ -72,8 +98,13 @@ impl<'a> FF31<'a> {
             b = revs.to_vec();
         }
 
-        a.extend(b);
-        a
+        if is_enc {
+            a.extend(b);
+            a
+        } else {
+            b.extend(a);
+            b
+        }
     }
 }
 
