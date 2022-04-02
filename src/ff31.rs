@@ -6,29 +6,52 @@ use std::ops::{Add, Sub};
 pub struct FF31<'a> {
     key: &'a [u8],
     radix: u32,
+    alphabet: &'a str,
     min: u32,
     max: u32,
 }
 
 impl<'a> FF31<'a> {
-    pub fn new(key: &'a [u8], radix: u32) -> Self {
+    pub fn new(key: &'a [u8], alphabet: &'a str) -> Self {
         FF31 {
             key,
-            radix,
+            alphabet,
+            radix: alphabet.len() as u32,
             min: 2,
             max: 10,
         }
     }
 
-    pub fn encrypt(&self, plain_text: &[u32], tweak: &[u8; 7]) -> Vec<u32> {
-        self.cipher(plain_text, tweak, true)
+    fn enc_from_string(&self, plain_text: &'a str) -> Vec<u32> {
+        let mut res = Vec::with_capacity(plain_text.len());
+        plain_text.chars().for_each(|c|{
+            for (i,ac) in self.alphabet.char_indices() {
+                if c == ac {
+                    res.push(i as u32);
+                    break;
+                }
+            }
+        });
+        res
+    }
+    
+    fn enc_to_string(&self, decrypted_str: &[u32]) -> String {
+        let mut res = String::with_capacity(decrypted_str.len());
+        decrypted_str.into_iter().for_each(|d| {
+            res.push(self.alphabet.chars().nth(*d as usize).unwrap());
+        });
+        res
     }
 
-    pub fn decrypt(&self, plain_text: &[u32], tweak: &[u8; 7]) -> Vec<u32> {
-        self.cipher(plain_text, tweak, false)
+    pub fn encrypt(&self, plain_text: &'a str, tweak: &[u8; 7]) -> Vec<u32> {
+        self.cipher(&self.enc_from_string(plain_text), tweak, true)
     }
 
-    pub fn cipher(&self, plain_text: &[u32], tweak: &[u8; 7], is_enc: bool) -> Vec<u32> {
+    pub fn decrypt(&self, cipher_text: &[u32], tweak: &[u8; 7]) -> String {
+        self.enc_to_string(&self.cipher(cipher_text, tweak, false))
+    }
+
+    fn cipher(&self, plain_text: &[u32], tweak: &[u8; 7], is_enc: bool) -> Vec<u32> {
         // step 1
         let u = plain_text.len() / 2;
         let v = plain_text.len() - u;
