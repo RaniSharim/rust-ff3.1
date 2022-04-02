@@ -6,7 +6,7 @@ fn main() {
     let tweak = [0; 7];
 
     let enc = x.encrypt("001001", &tweak);
-    // let dec = x.decrypt(&enc, &tweak);
+    let dec = x.decrypt(&enc, &tweak);
 
-    // println!("{:?}", &dec);
+    println!("{:?}", &dec);
 }

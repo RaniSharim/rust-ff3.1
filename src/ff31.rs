@@ -7,18 +7,21 @@ pub struct FF31<'a> {
     key: &'a [u8],
     radix: u32,
     alphabet: &'a str,
-    min: u32,
-    max: u32,
+    min: usize,
+    max: usize,
 }
 
 impl<'a> FF31<'a> {
     pub fn new(key: &'a [u8], alphabet: &'a str) -> Self {
+        let radix = alphabet.len();
+        let max = (192f64 / (radix as f64).log2()).floor() as usize;
+
         FF31 {
             key,
             alphabet,
-            radix: alphabet.len() as u32,
-            min: 2,
-            max: 10,
+            radix: radix as u32,
+            min: 7,
+            max,
         }
     }
 
@@ -44,6 +47,14 @@ impl<'a> FF31<'a> {
     }
 
     pub fn encrypt(&self, plain_text: &'a str, tweak: &[u8; 7]) -> Vec<u32> {
+        if plain_text.len() < self.min {
+            panic!("text too small");
+        }
+
+        if plain_text.len() > self.max {
+            panic!("text too large");
+        }
+
         self.cipher(&self.enc_from_string(plain_text), tweak, true)
     }
 
