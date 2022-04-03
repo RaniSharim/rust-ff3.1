@@ -1,14 +1,33 @@
-use aes::cipher::{generic_array::GenericArray, BlockEncrypt, KeyInit};
-use aes::Aes128;
+use aes::cipher::KeyInit;
+use aes::cipher::{generic_array::GenericArray, BlockEncrypt};
+use aes::{Aes128, Aes192, Aes256};
 
 use num_bigint::{BigInt, Sign, ToBigInt};
 use std::ops::{Add, Div, Mul, Sub};
+
+enum Cipher {
+    AES128(Aes128),
+    AES192(Aes192),
+    AES256(Aes256),
+}
+
+impl Cipher {
+    fn ciph(&self, x: &mut [u8; 16]) {
+        let block = GenericArray::from_mut_slice(x);
+        match &self {
+            Cipher::AES128(cipher) => cipher.encrypt_block(block),
+            Cipher::AES192(cipher) => cipher.encrypt_block(block),
+            Cipher::AES256(cipher) => cipher.encrypt_block(block)
+        }        
+    }
+}
+
 pub struct FF31<'a> {
-    key: &'a [u8],
     radix: u32,
     alphabet: &'a str,
     min: usize,
     max: usize,
+    ciph_alg: Cipher,
 }
 
 impl<'a> FF31<'a> {
@@ -16,12 +35,34 @@ impl<'a> FF31<'a> {
         let radix = alphabet.len();
         let max = (192f64 / (radix as f64).log2()).floor() as usize;
 
+
+        let ciph_alg = match key.len() {
+            16 => { 
+                let key = GenericArray::from_slice(key);
+                let cipher = Aes128::new(key); 
+                Cipher::AES128(cipher)
+            }
+            24 => { 
+                let key = GenericArray::from_slice(key);
+                let cipher = Aes192::new(key); 
+                Cipher::AES192(cipher)
+            }
+            32 => { 
+                let key = GenericArray::from_slice(key);
+                let cipher = Aes256::new(key); 
+                Cipher::AES256(cipher)
+
+            }
+            _ => panic!("wrong key size provided")
+       };
+
+
         FF31 {
-            key,
             alphabet,
             radix: radix as u32,
             min: 7,
             max,
+            ciph_alg,
         }
     }
 
@@ -46,37 +87,37 @@ impl<'a> FF31<'a> {
         res
     }
 
-    pub fn encrypt(&self, plain_text: &'a str, tweak: &[u8; 7]) -> Vec<u32> {
-        if plain_text.len() < self.min {
+    pub fn encrypt(&self, plain_text: &'a str, tweak: &[u8; 7]) -> String {
+        self.enc_to_string(&self.cipher(&self.enc_from_string(plain_text), tweak, true))
+    }
+
+    pub fn decrypt(&self, cipher_text: &'a str, tweak: &[u8; 7]) -> String {
+        self.enc_to_string(&self.cipher(&self.enc_from_string(cipher_text), tweak, false))
+    }
+
+    fn cipher(&self, text: &[u32], tweak: &[u8; 7], is_enc: bool) -> Vec<u32> {
+        if text.len() < self.min {
             panic!("text too small");
         }
 
-        if plain_text.len() > self.max {
+        if text.len() > self.max {
             panic!("text too large");
         }
-
-        self.cipher(&self.enc_from_string(plain_text), tweak, true)
-    }
-
-    pub fn decrypt(&self, cipher_text: &[u32], tweak: &[u8; 7]) -> String {
-        self.enc_to_string(&self.cipher(cipher_text, tweak, false))
-    }
-
-    fn cipher(&self, plain_text: &[u32], tweak: &[u8; 7], is_enc: bool) -> Vec<u32> {
+        
         // step 1
-        let u = plain_text.len() / 2;
-        let v = plain_text.len() - u;
+        let u = text.len() / 2;
+        let v = text.len() - u;
 
         // step 2
         let mut a: Vec<u32>;
         let mut b: Vec<u32>;
 
         if is_enc {
-            a = Vec::from(&plain_text[..u]);
-            b = Vec::from(&plain_text[u..]);
+            a = Vec::from(&text[..u]);
+            b = Vec::from(&text[u..]);
         } else {
-            b = Vec::from(&plain_text[..u]);
-            a = Vec::from(&plain_text[u..]);
+            b = Vec::from(&text[..u]);
+            a = Vec::from(&text[u..]);
         }
 
         // step 3
@@ -116,7 +157,9 @@ impl<'a> FF31<'a> {
             }
 
             p.reverse();
-            self.ciph(&mut p);
+
+            self.ciph_alg.ciph(&mut p);
+
             p.reverse();
 
             let y = BigInt::from_bytes_be(Sign::Plus, &p);
@@ -144,14 +187,6 @@ impl<'a> FF31<'a> {
             b.extend(a);
             b
         }
-    }
-
-    fn ciph(&self, x: &mut [u8; 16]) {
-        let key = GenericArray::from_slice(self.key);
-        let block = GenericArray::from_mut_slice(x);
-
-        let cipher = Aes128::new(key);
-        cipher.encrypt_block(block);
     }
 }
 
