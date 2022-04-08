@@ -1,66 +1,38 @@
-use aes::cipher::KeyInit;
-use aes::cipher::{generic_array::GenericArray, BlockEncrypt};
+use aes::cipher::{generic_array::GenericArray, BlockCipher, BlockEncrypt, KeyInit, KeySizeUser};
 use aes::{Aes128, Aes192, Aes256};
 
 use num_bigint::{BigInt, Sign, ToBigInt};
 use std::ops::{Add, Div, Mul, Sub};
 
-enum Cipher {
-    AES128(Aes128),
-    AES192(Aes192),
-    AES256(Aes256),
-}
+pub trait CipherTraitBundle: BlockCipher + BlockEncrypt + KeyInit + KeySizeUser {}
 
-impl Cipher {
-    fn ciph(&self, x: &mut [u8; 16]) {
-        let block = GenericArray::from_mut_slice(x);
-        match &self {
-            Cipher::AES128(cipher) => cipher.encrypt_block(block),
-            Cipher::AES192(cipher) => cipher.encrypt_block(block),
-            Cipher::AES256(cipher) => cipher.encrypt_block(block)
-        }        
-    }
-}
+impl CipherTraitBundle for Aes128 {}
+impl CipherTraitBundle for Aes192 {}
+impl CipherTraitBundle for Aes256 {}
 
-pub struct FF31<'a> {
+pub struct FF31<'a, CI: CipherTraitBundle> {
     radix: u32,
     alphabet: &'a str,
     min: usize,
     max: usize,
-    ciph_alg: Cipher,
+    ciph_alg: CI,
 }
 
-impl<'a> FF31<'a> {
+impl<'a, CI: CipherTraitBundle> FF31<'a, CI> {
     pub fn new(key: &'a [u8], alphabet: &'a str) -> Self {
         let radix = alphabet.len();
+
+        let min = (6f64 / (radix as f64).log10()).ceil() as usize;
         let max = (192f64 / (radix as f64).log2()).floor() as usize;
 
+        let key = GenericArray::from_slice(key);
 
-        let ciph_alg = match key.len() {
-            16 => { 
-                let key = GenericArray::from_slice(key);
-                let cipher = Aes128::new(key); 
-                Cipher::AES128(cipher)
-            }
-            24 => { 
-                let key = GenericArray::from_slice(key);
-                let cipher = Aes192::new(key); 
-                Cipher::AES192(cipher)
-            }
-            32 => { 
-                let key = GenericArray::from_slice(key);
-                let cipher = Aes256::new(key); 
-                Cipher::AES256(cipher)
-
-            }
-            _ => panic!("wrong key size provided")
-       };
-
+        let ciph_alg = <CI as KeyInit>::new(key);
 
         FF31 {
             alphabet,
             radix: radix as u32,
-            min: 7,
+            min,
             max,
             ciph_alg,
         }
@@ -103,7 +75,7 @@ impl<'a> FF31<'a> {
         if text.len() > self.max {
             panic!("text too large");
         }
-        
+
         // step 1
         let u = text.len() / 2;
         let v = text.len() - u;
@@ -158,7 +130,7 @@ impl<'a> FF31<'a> {
 
             p.reverse();
 
-            self.ciph_alg.ciph(&mut p);
+            self.ciph(&mut p);
 
             p.reverse();
 
@@ -187,6 +159,11 @@ impl<'a> FF31<'a> {
             b.extend(a);
             b
         }
+    }
+
+    fn ciph(&self, x: &mut [u8; 16]) {
+        let block = GenericArray::from_mut_slice(x);
+        self.ciph_alg.encrypt_block(block);
     }
 }
 
