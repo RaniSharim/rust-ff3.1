@@ -1,0 +1,27 @@
+use aes::Aes128;
+pub mod ff31;
+
+#[cfg(test)]
+fn test128(key: &[u8], tweak: &[u8; 7], alphabet: &str, plain_text: &str, cypher_text: &str) {
+    let ffp = ff31::FF31::<Aes128>::new(key, alphabet);
+
+    let enc = ffp.encrypt(plain_text, tweak);
+    assert_eq!(enc, cypher_text);
+
+    let dec = ffp.decrypt(&enc, tweak);
+    assert_eq!(dec, plain_text);
+}
+
+#[test]
+fn aes128() {
+    test128(
+        &[
+            0xef, 0x43, 0x59, 0xd8, 0xd5, 0x80, 0xaa, 0x4f, 0x7f, 0x03, 0x6d, 0x6f, 0x04, 0xfc,
+            0x6a, 0x94,
+        ],
+        &[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
+        "0123456789",
+        "890121234567890000",
+        "075870132022772250",
+    );
+}

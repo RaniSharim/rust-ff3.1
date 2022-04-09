@@ -1,5 +1,7 @@
-use aes::cipher::{generic_array::GenericArray, BlockCipher, BlockEncrypt, KeyInit, KeySizeUser};
-use aes::{Aes128, Aes192, Aes256};
+use aes::{
+    cipher::{generic_array::GenericArray, BlockCipher, BlockEncrypt, KeyInit, KeySizeUser},
+    {Aes128, Aes192, Aes256},
+};
 
 use num_bigint::{BigInt, Sign, ToBigInt};
 use std::ops::{Add, Div, Mul, Sub};
@@ -19,15 +21,13 @@ pub struct FF31<'a, CI: CipherTraitBundle> {
 }
 
 impl<'a, CI: CipherTraitBundle> FF31<'a, CI> {
-    pub fn new(key: &'a [u8], alphabet: &'a str) -> Self {
+    pub fn new(key: &[u8], alphabet: &'a str) -> Self {
         let radix = alphabet.len();
 
         let min = (6f64 / (radix as f64).log10()).ceil() as usize;
         let max = (192f64 / (radix as f64).log2()).floor() as usize;
 
-        let key = GenericArray::from_slice(key);
-
-        let ciph_alg = <CI as KeyInit>::new(key);
+        let ciph_alg = <CI as KeyInit>::new(key.into());
 
         FF31 {
             alphabet,
@@ -99,6 +99,9 @@ impl<'a, CI: CipherTraitBundle> FF31<'a, CI> {
         // step 4
         let mut p = [0u8; 16];
         for i in 0..8 {
+            println!("a = {:?}", &a);
+            println!("b = {:?}", &b);
+
             let mut m = u as u32;
             let mut w = t_r;
 
@@ -114,6 +117,7 @@ impl<'a, CI: CipherTraitBundle> FF31<'a, CI> {
             } else {
                 p[3] ^= (7 - i) as u8;
             }
+            // println!("p = {:?}", p);
 
             let c = to_bigint(&revs(&b), self.radix);
 
@@ -127,12 +131,16 @@ impl<'a, CI: CipherTraitBundle> FF31<'a, CI> {
                 p[4..p_len - nb_len].fill(0);
                 p[p_len - nb_len..].copy_from_slice(&nb[..])
             }
+            // println!("p = {:?}", p);
 
             p.reverse();
+            // println!("rev = {:?}", p);
 
             self.ciph(&mut p);
+            println!("cyph = {:?}", p);
 
             p.reverse();
+            // println!("p = {:?}", p);
 
             let y = BigInt::from_bytes_be(Sign::Plus, &p);
             let mut c = to_bigint(&revs(&a), self.radix);
